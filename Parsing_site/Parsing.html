@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Лабораторная №5 — исправлено</title>
+    <style id="style-page"></style>
+    <style>
+body {
+    margin: 3em;
+    display: flex;
+    flex-direction: column;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+}
+
+.input-block {
+    margin-bottom: 2em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+}
+
+h2 {
+    font-size: 1.5em;
+    color: #222;
+    margin-bottom: 0.5em;
+}
+
+#url-input {
+    width: 100%;
+    max-width: 24em;
+    padding: 0.6em 1em;
+    border: 2px solid #ccc;
+    border-radius: 12px;
+    font-size: 1em;
+    transition: all 0.3s ease;
+}
+
+#url-input:focus {
+    outline: none;
+    border-color: #007BFF;
+    box-shadow: 0 0 5px rgba(0,123,255,0.5);
+}
+
+#url-btn {
+    width: 12em;
+    padding: 0.6em 1em;
+    font-size: 1em;
+    color: white;
+    background: linear-gradient(45deg, #007BFF, #00C6FF);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#url-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+#url-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+#page {
+    background-color: white;
+   
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+   
+    width: 100%;
+    line-height: 1.6;
+}
+
+.pattern-digit {
+    border-bottom: 3px solid #FF4C4C; /* ярко-красный */
+}
+
+.pattern-b-word {
+    border-bottom: 3px solid #4C6EFF; /* синий */
+}
+
+.pattern-nn-word {
+    border-bottom: 3px solid #28A745; /* зелёный */
+}
+</style>
+
+</head>
+<body>
+    <div class="input-block">
+        <h2>Введите URL</h2>
+        <input type="url" name="url-input" id="url-input">
+        <button type="submit" id="url-btn">Парсинг</button>
+    </div>
+    <div id="page"></div>
+
+    <script>
+
+    const page = document.getElementById('page');
+    const stylePage = document.getElementById('style-page');
+    const urlBtn = document.getElementById('url-btn');
+    const urlInput = document.getElementById('url-input');
+
+    urlInput.value = 'https://www.sports.ru/football/person/cristiano-ronaldo';
+
+    async function fetchPageContent(url) {
+        const proxies = [
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+            `https://corsproxy.io/?${encodeURIComponent(url)}`,
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+        ];
+
+        for (const proxyUrl of proxies) {
+            try {
+                const response = await fetch(proxyUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Accept-Charset': 'UTF-8'
+                    }
+                });
+
+                if (response.ok) {
+                    const buffer = await response.arrayBuffer();
+                    const text = decodeBuffer(buffer);
+                    return text;
+                }
+
+            } catch (error) {
+                continue;
+            }
+        }
+
+        throw new Error('Все прокси недоступны');
+    }
+
+
+    function decodeBuffer(buffer) {
+        try {
+            const utf8 = new TextDecoder('utf-8', {fatal: false}).decode(buffer);
+            const replaceCount = (utf8.match(/�/g) || []).length;
+            if (replaceCount / Math.max(1, utf8.length) < 0.02) {
+                return utf8;
+            }
+        } catch (e) {
+            
+        }
+
+        try {
+            const cp1251 = new TextDecoder('windows-1251').decode(buffer);
+            return cp1251;
+        } catch (e) {
+            return new TextDecoder('utf-8').decode(buffer);
+        }
+    }
+
+    // ------------------ Обработка и вставка CSS ------------------
+    async function setStyles(styles, baseUrl) {
+        stylePage.innerHTML = '';
+        for (const styleEl of styles) {
+            try {
+                const href = styleEl.getAttribute('href');
+                if (!href) continue;
+                const styleUrl = new URL(href, baseUrl).href;
+                const cssText = await fetchPageContent(styleUrl);
+                const rewritten = rewriteCssUrls(cssText, styleUrl);
+                stylePage.innerHTML +=  rewritten;
+            } catch (error) {
+                console.warn('Не удалось загрузить стиль:', error);
+            }
+        }
+    }
+
+    function rewriteCssUrls(cssText, styleUrl) {
+        return cssText.replace(/url\(([^)]+)\)/g, (m, urlPart) => {
+            let url = urlPart.trim().replace(/^['\"]|['\"]$/g, '');
+            try {
+                const abs = new URL(url, styleUrl).href;
+                return `url('${abs}')`;
+            } catch (e) {
+                return `url(${urlPart})`;
+            }
+        });
+    }
+
+    // ------------------ Абсолютные пути для изображений ------------------
+    function convertToAbsoluteUrl(relativeUrl, baseUrl) {
+        if (!relativeUrl) return '';
+        try {
+            return new URL(relativeUrl, baseUrl).href;
+        } catch (error) {
+            return relativeUrl;
+        }
+    }
+
+    function fixImagePaths(doc, baseUrl) {
+        const images = doc.querySelectorAll('img');
+        images.forEach(img => {
+            const src = img.getAttribute('src');
+            if (src) {
+                const absoluteSrc = convertToAbsoluteUrl(src, baseUrl);
+                img.setAttribute('src', absoluteSrc);
+            }
+            // srcset
+            const srcset = img.getAttribute('srcset');
+            if (srcset) {
+                const parts = srcset.split(',').map(p => p.trim()).map(entry => {
+                    const [u, descriptor] = entry.split(/\s+/);
+                    return (convertToAbsoluteUrl(u, baseUrl)) + (descriptor ? (' ' + descriptor) : '');
+                });
+                img.setAttribute('srcset', parts.join(', '));
+            }
+        });
+    }
+
+    // ------------------ Обработка текста (без ломания DOM) ------------------
+    // Используем обход текстовых нод и заменяем только текст на фрагмент с элементами
+    function processText(root) {
+        const walker = document.createTreeWalker(
+            root,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function(node) {
+                    // пропускаем пустые и нодв внутри специфичных тегов
+                    const parentTag = node.parentNode && node.parentNode.nodeName;
+                    const skip = ['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'TEXTAREA', 'INPUT', 'CODE', 'PRE'];
+                    if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                    if (skip.includes(parentTag)) return NodeFilter.FILTER_REJECT;
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            },
+            false
+        );
+
+        const textNodes = [];
+        let current;
+        while (current = walker.nextNode()) {
+            textNodes.push(current);
+        }
+
+        textNodes.forEach(tn => {
+            const parent = tn.parentNode;
+            const frag = buildFragmentFromText(tn.nodeValue);
+            if (frag && frag.childNodes.length > 0) {
+                parent.replaceChild(frag, tn);
+            }
+        });
+    }
+
+    // конструкция фрагмента: чередуем текст и span для соответсвующих паттернов
+    function buildFragmentFromText(text) {
+        const frag = document.createDocumentFragment();
+
+        // порядок применения: цифры, слова на B, слова с "нн"
+        // Мы создаём единый regexp, чтобы корректно сохранить порядок и избежать наложений
+        const patterns = [
+            {name: 'digit', re: /\d+/g},
+            {name: 'bword', re: /\bB[\w-]*\b/g},
+            {name: 'nn', re: /[а-яёА-ЯЁ]+нн[а-яёА-ЯЁ]*/gi}
+        ];
+
+        // Объединяем паттерны в один, сохраняя группы
+        const combined = new RegExp(
+            [patterns[0].re.source, patterns[1].re.source, patterns[2].re.source].join('|'),
+            'g'
+        );
+
+        let lastIndex = 0;
+        let match;
+        while ((match = combined.exec(text)) !== null) {
+            const idx = match.index;
+            if (idx > lastIndex) {
+                frag.appendChild(document.createTextNode(text.slice(lastIndex, idx)));
+            }
+
+            const matchedText = match[0];
+            let span = null;
+
+            if (match[0].match(/\d+/)) {
+                span = document.createElement('span');
+                span.className = 'pattern-digit';
+                span.textContent = matchedText;
+            } else if (match[0].match(/\bB[\w-]*\b/)) {
+                span = document.createElement('span');
+                span.className = 'pattern-b-word';
+                span.textContent = matchedText;
+            } else if (match[0].match(/[а-яёА-ЯЁ]+нн[а-яёА-ЯЁ]*/i)) {
+                span = document.createElement('span');
+                span.className = 'pattern-nn-word';
+                span.textContent = matchedText;
+            }
+
+            if (span) frag.appendChild(span);
+
+            lastIndex = combined.lastIndex;
+        }
+
+        if (lastIndex < text.length) {
+            frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+
+        return frag;
+    }
+
+    // ------------------ Основной процессинг HTML ------------------
+    async function processContent(html, baseUrl) {
+        // Парсим полученный HTML в отдельный документ
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Удалим скрипты — безопаснее
+        doc.querySelectorAll('script').forEach(s => s.remove());
+
+        // Подключим стили
+        const styles = doc.querySelectorAll('link[rel="stylesheet"]');
+        await setStyles(styles, baseUrl);
+
+        // исправляем src у картинок
+        fixImagePaths(doc, baseUrl);
+
+        // обработаем текст
+        processText(doc.body);
+
+        return doc;
+    }
+
+    // ------------------ Отображение результата ------------------
+    function displayResults(doc) {
+        // очищаем контейнер
+        page.innerHTML = '';
+        // импортируем все ноды из doc.body в текущий документ
+        Array.from(doc.body.childNodes).forEach(node => {
+            page.appendChild(document.importNode(node, true));
+        });
+    }
+
+    // ------------------ Парсинг по кнопке ------------------
+    async function parse() {
+        stylePage.innerHTML = '';
+        page.innerHTML = '';
+        const url = urlInput.value.trim();
+        if (!url) {
+            page.innerHTML = '<p style="color: red;">Введите корректный URL</p>';
+            return;
+        }
+
+        try {
+            const htmlContent = await fetchPageContent(url);
+            const doc = await processContent(htmlContent, url);
+            displayResults(doc);
+        } catch (error) {
+            console.error('Ошибка:', error);
+            page.innerHTML = '<p style="color: red;">Ошибка загрузки страницы: ' + (error.message || error) + '</p>';
+        }
+    }
+
+    urlBtn.addEventListener('click', parse);
+
+ 
+    </script>
+</body>
+</html>
