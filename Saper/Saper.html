@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сапер</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            width: 300px;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(10, 30px);
+            grid-gap: 2px;
+            background-color: #00008B;
+            padding: 5px;
+            border: 3px solid #00008B;
+        }
+        
+        .cell {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color:  #8B0000;
+            border: 1px outset #c0c0c0;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .cell.revealed {
+            border: 1px solid #808080;
+            background-color: #e0e0e0;
+        }
+        
+        .cell.flagged::before {
+            content: "🚩";
+        }
+        
+        .cell.mine::before {
+            content: "💣";
+        }
+        
+        .cell.mine.revealed {
+            background-color: #ffcccc;
+        }
+        
+        .number-1 { color: blue; }
+        .number-2 { color: green; }
+        .number-3 { color: red; }
+        .number-4 { color: darkblue; }
+        .number-5 { color: brown; }
+        .number-6 { color: teal; }
+        .number-7 { color: black; }
+        .number-8 { color: gray; }
+        
+        .controls {
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .game-over {
+            margin-top: 15px;
+            font-size: 20px;
+            font-weight: bold;
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>Сапер</h1>
+    <div class="game-info">
+        <div class="mines-count">Мины: <span id="mines">10</span></div>
+        <div class="timer">Время: <span id="time">0</span></div>
+    </div>
+    <div class="game-board" id="board"></div>
+    <div class="game-over" id="game-over"></div>
+    <div class="controls">
+        <button id="restart">Новая игра</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const boardElement = document.getElementById('board');
+            const minesElement = document.getElementById('mines');
+            const timeElement = document.getElementById('time');
+            const gameOverElement = document.getElementById('game-over');
+            const restartButton = document.getElementById('restart');
+            
+            // Настройки игры
+            const ROWS = 10;
+            const COLS = 10;
+            const MINES_COUNT = 10;
+            
+            let board = [];
+            let minesLeft = MINES_COUNT;
+            let gameStarted = false;
+            let gameOver = false;
+            let timer = 0;
+            let timerInterval;
+            
+            // Инициализация игры
+            function initGame() {
+                board = [];
+                minesLeft = MINES_COUNT;
+                gameStarted = false;
+                gameOver = false;
+                timer = 0;
+                clearInterval(timerInterval);
+                timeElement.textContent = timer;
+                minesElement.textContent = minesLeft;
+                gameOverElement.textContent = '';
+                
+                // Создаем пустое поле
+                for (let row = 0; row < ROWS; row++) {
+                    board[row] = [];
+                    for (let col = 0; col < COLS; col++) {
+                        board[row][col] = {
+                            isMine: false,
+                            isRevealed: false,
+                            isFlagged: false,
+                            neighborMines: 0
+                        };
+                    }
+                }
+                
+                renderBoard();
+            }
+            
+            // Рендеринг игрового поля
+            function renderBoard() {
+                boardElement.innerHTML = '';
+                
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.row = row;
+                        cell.dataset.col = col;
+                        
+                        const cellData = board[row][col];
+                        
+                        if (cellData.isRevealed) {
+                            cell.classList.add('revealed');
+                            
+                            if (cellData.isMine) {
+                                cell.classList.add('mine');
+                            } else if (cellData.neighborMines > 0) {
+                                cell.textContent = cellData.neighborMines;
+                                cell.classList.add(`number-${cellData.neighborMines}`);
+                            }
+                        } else if (cellData.isFlagged) {
+                            cell.classList.add('flagged');
+                        }
+                        
+                        cell.addEventListener('click', () => handleCellClick(row, col));
+                        cell.addEventListener('contextmenu', (e) => {
+                            e.preventDefault();
+                            handleRightClick(row, col);
+                        });
+                        
+                        boardElement.appendChild(cell);
+                    }
+                }
+            }
+            
+            // Расстановка мин после первого хода
+            function placeMines(firstRow, firstCol) {
+                let minesPlaced = 0;
+                
+                while (minesPlaced < MINES_COUNT) {
+                    const row = Math.floor(Math.random() * ROWS);
+                            const col = Math.floor(Math.random() * COLS); 
+                    
+                    
+                    // Не ставим мину на первую открытую клетку и вокруг нее
+                    if (
+                        !board[row][col].isMine && 
+                        Math.abs(row - firstRow) > 1 && 
+                        Math.abs(col - firstCol) > 1
+                    ) {
+                        board[row][col].isMine = true;
+                        minesPlaced++;
+                    }
+                }
+                
+                // Подсчет мин вокруг каждой клетки
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        if (!board[row][col].isMine) {
+                            board[row][col].neighborMines = countNeighborMines(row, col);
+                        }
+                    }
+                }
+            }
+            
+            // Подсчет мин вокруг клетки
+            function countNeighborMines(row, col) {
+                let count = 0;
+                
+                for (let r = Math.max(0, row - 1); r <= Math.min(ROWS - 1, row + 1); r++) {
+                    for (let c = Math.max(0, col - 1); c <= Math.min(COLS - 1, col + 1); c++) {
+                        if (r === row && c === col) continue;
+                        if (board[r][c].isMine) count++;
+                    }
+                }
+                
+                return count;
+            }
+            
+            // Обработка клика по клетке
+            function handleCellClick(row, col) {
+                if (gameOver || board[row][col].isRevealed || board[row][col].isFlagged) return;
+                
+                if (!gameStarted) {
+                    gameStarted = true;
+                    placeMines(row, col);
+                    startTimer();
+                }
+                
+                revealCell(row, col);
+                
+                if (board[row][col].isMine) {
+                    gameOver = true;
+                    revealAllMines();
+                    gameOverElement.textContent = 'Игра окончена! Вы проиграли.';
+                    clearInterval(timerInterval);
+                } else if (checkWin()) {
+                    gameOver = true;
+                    gameOverElement.textContent = 'Поздравляем! Вы выиграли!';
+                    clearInterval(timerInterval);
+                }
+                
+                renderBoard();
+            }
+            
+            // Обработка правого клика (флажок)
+            function handleRightClick(row, col) {
+                if (gameOver || board[row][col].isRevealed) return;
+                
+                if (!board[row][col].isFlagged) {
+                    board[row][col].isFlagged = true;
+                    minesLeft--;
+                } else {
+                    board[row][col].isFlagged = false;
+                    minesLeft++;
+                }
+                
+                minesElement.textContent = minesLeft;
+                renderBoard();
+            }
+            
+            // Открытие клетки
+            function revealCell(row, col) {
+                if (
+                    row < 0 || row >= ROWS || 
+                    col < 0 || col >= COLS || 
+                    board[row][col].isRevealed || 
+                    board[row][col].isFlagged
+                ) return;
+                
+                board[row][col].isRevealed = true;
+                
+                // Если клетка пустая, рекурсивно открываем соседей
+                if (board[row][col].neighborMines === 0) {
+                    for (let r = Math.max(0, row - 1); r <= Math.min(ROWS - 1, row + 1); r++) {
+                        for (let c = Math.max(0, col - 1); c <= Math.min(COLS - 1, col + 1); c++) {
+                            revealCell(r, c);
+                        }
+                    }
+                }
+            }
+            
+            // Открытие всех мин при проигрыше
+            function revealAllMines() {
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        if (board[row][col].isMine) {
+                            board[row][col].isRevealed = true;
+                        }
+                    }
+                }
+            }
+            
+            // Проверка на победу
+            function checkWin() {
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        const cell = board[row][col];
+                        if (!cell.isMine && !cell.isRevealed) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+            
+            // Запуск таймера
+            function startTimer() {
+                timerInterval = setInterval(() => {
+                    timer++;
+                    timeElement.textContent = timer;
+                }, 1000);
+            }
+            
+            // Инициализация игры при загрузке
+            initGame();
+            
+            // Обработчик кнопки перезапуска
+            restartButton.addEventListener('click', initGame);
+        });
+    </script>
+</body>
+</html>
