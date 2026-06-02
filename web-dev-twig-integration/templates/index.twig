@@ -1,0 +1,46 @@
+{% extends 'base.twig' %}
+
+{% block title %}Каталог автомобилей{% endblock %}
+
+{% block content %}
+    <h2>Список автомобилей</h2>
+    <p>Всего: {{ items|length }}</p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Название</th>
+                <th>Марка</th>
+                <th>Год</th>
+                <th>Цена</th>
+                <th>Тип</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td><strong>{{ item.name }}</strong></td>
+                <td>{{ item.brand }}</td>
+                <td>{{ item.year }}</td>
+                <td>{{ item.price|number_format(0, ',', ' ') }} $</td>
+                <td>
+                    {% if item.electric %}
+                        <span class="badge-electric">⚡ Электрический</span>
+                    {% else %}
+                        <span class="badge-fuel">⛽ Бензиновый</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="stats">
+        <h3>Статистика:</h3>
+        <ul>
+            <li>Общая стоимость: {{ stats.total|number_format(0, ',', ' ') }} $</li>
+            <li>Электромобилей: {{ stats.electric_count }}</li>
+            <li>Автомобилей с ДВС: {{ stats.fuel_count }}</li>
+        </ul>
+    </div>
+{% endblock %}

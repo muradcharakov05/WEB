@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Мой сайт{% endblock %}</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #f0f0f0; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #667eea; color: white; }
+        .badge-electric { background: #4caf50; color: white; padding: 3px 8px; border-radius: 4px; }
+        .badge-fuel { background: #ff9800; color: white; padding: 3px 8px; border-radius: 4px; }
+        .stats { background: #e9ecef; padding: 15px; margin-top: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ page_title }}</h1>
+        
+        {% if user %}
+        <div class="user-info">
+            <strong>Пользователь:</strong> {{ user.name }} ({{ user.role }})<br>
+            <strong>Email:</strong> {{ user.email }}
+        </div>
+        {% endif %}
+        
+        {% block content %}{% endblock %}
+        
+        
+    </div>
+</body>
+</html>
